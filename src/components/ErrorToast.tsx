@@ -6,14 +6,17 @@ import { ErrorToastProps } from '../types';
 export const ErrorToast: React.FC<ErrorToastProps> = ({ 
   error, 
   onClose, 
-  onRetry 
+  onRetry,
+  retryLabel = 'Try Again',
+  closeLabel = 'Close error notification',
+  autoCloseMs = 8000,
 }) => {
   useEffect(() => {
     if (!error.retryable) {
-      const timer = setTimeout(onClose, 8000);
+      const timer = setTimeout(onClose, autoCloseMs);
       return () => clearTimeout(timer);
     }
-  }, [error.retryable, onClose]);
+  }, [error.retryable, onClose, autoCloseMs]);
 
   const icons = {
     network: '🌐',
@@ -55,6 +58,7 @@ export const ErrorToast: React.FC<ErrorToastProps> = ({
         </h3>
         <button
           onClick={onClose}
+          aria-label={closeLabel}
           style={{
             marginLeft: 'auto',
             background: 'none',
@@ -106,7 +110,7 @@ export const ErrorToast: React.FC<ErrorToastProps> = ({
             cursor: 'pointer',
           }}
         >
-          Try Again
+          {retryLabel}
         </button>
       )}
 
@@ -119,7 +123,7 @@ export const ErrorToast: React.FC<ErrorToastProps> = ({
             height: '3px',
             background: colors[error.type],
             borderRadius: '0 0 0 12px',
-            animation: 'progress 8s linear forwards',
+            animation: `progress ${autoCloseMs}ms linear forwards`,
           }}
         />
       )}

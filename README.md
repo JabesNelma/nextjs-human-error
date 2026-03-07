@@ -1,123 +1,177 @@
 # nextjs-human-error
 
-🎯 **Human-friendly error handling for Next.js applications**
+Human-friendly error handling for Next.js and React applications.
 
-Transform technical errors into clear, actionable messages your users will actually understand.
+Turn technical errors into clear, actionable messages users can understand.
 
 ![npm version](https://img.shields.io/npm/v/nextjs-human-error)
 ![license](https://img.shields.io/npm/l/nextjs-human-error)
 
----
+## Features
 
-## ✨ Why?
+- Converts unknown runtime/API errors into user-friendly messages
+- Built-in parser for network, validation, auth, server, and unknown errors
+- Custom error matcher support via `createErrorParser` and `parseError` options
+- React hook `useHumanError` with retry handling and lifecycle callbacks
+- Ready-to-use `ErrorToast` component with configurable labels and auto-close
+- Type-safe helpers: `isHumanError` and `ensureHumanError`
 
-| Before | After |
-|--------|-------|
-| `Cannot read property 'id' of undefined` | **"Application Error"** - A technical glitch occurred while loading this feature. |
-| `500 Internal Server Error` | **"Server Error"** - Our server encountered a problem. Please try again. |
-| `Failed to fetch` | **"Connection Lost"** - Check your Wi-Fi or mobile data connection. |
-
----
-
-## 🚀 Installation
+## Installation
 
 ```bash
 npm install nextjs-human-error
+```
 
-📖 Quick Start
-1. Use the Hook in Your Component
-TypeScript
-Copy
+## Quick Start
 
+```tsx
 'use client';
 
-import { useHumanError, ErrorToast } from 'nextjs-human-error';
+import { ErrorToast, useHumanError } from 'nextjs-human-error';
 
-export default function MyComponent() {
+export default function CheckoutForm() {
   const { error, showError, clearError, retry } = useHumanError();
 
-  const handleSubmit = async () => {
+  const submitOrder = async () => {
     try {
-      await fetch('/api/submit', { method: 'POST' });
+      await fetch('/api/orders', { method: 'POST' });
     } catch (err) {
-      showError(err); // Automatically shows human-friendly error!
+      showError(err, {
+        retryAction: submitOrder,
+      });
     }
   };
 
   return (
-    <div>
-      <button onClick={handleSubmit}>Submit</button>
-      
+    <>
+      <button onClick={submitOrder}>Place order</button>
+
       {error && (
-        <ErrorToast 
-          error={error} 
+        <ErrorToast
+          error={error}
           onClose={clearError}
           onRetry={retry}
+          retryLabel="Try submit again"
         />
       )}
-    </div>
+    </>
   );
 }
+```
 
-🎨 Error Types
-Table
-Type	Icon	Color	Use Case
-Network	🌐	Blue	Connection issues, offline
-Validation	⚠️	Yellow	Form errors, invalid input
-Auth	🔒	Red	Login expired, no permission
-Server	🔧	Purple	500 errors, server down
-Unknown	💥	Gray	Unexpected errors
-🔧 Advanced Usage
-Parse Error Manually
-TypeScript
-Copy
+## Core API
 
+### `parseError(error, options?)`
+
+Parse unknown errors into `HumanError`.
+
+```ts
 import { parseError } from 'nextjs-human-error';
 
 const humanError = parseError(apiError);
-console.log(humanError.title);      // "Connection Lost"
-console.log(humanError.message);    // "Unable to connect to the server..."
-console.log(humanError.action);     // "Check your Wi-Fi..."
-console.log(humanError.retryable);  // true
+```
 
-Custom Styling
-The ErrorToast component uses inline styles by default. You can override by wrapping it:
-TypeScript
-Copy
+### `createErrorParser(baseOptions?)`
 
-<div className="my-custom-wrapper">
-  <ErrorToast error={error} onClose={clearError} />
-</div>
+Create a reusable parser instance with app-level custom rules.
 
-📦 API Reference
-useHumanError()
-Table
-Property	Type	Description
-error	HumanError | null	Current error state
-showError(err)	(any) => void	Parse and show error
-clearError()	() => void	Hide error toast
-retry()	() => void	Retry last error
-HumanError Interface
-TypeScript
-Copy
+```ts
+import { createErrorParser } from 'nextjs-human-error';
+
+const parseAppError = createErrorParser({
+  matchers: [
+    {
+      when: (error) =>
+        typeof error === 'object' &&
+        error !== null &&
+        'status' in error &&
+        (error as { status?: number }).status === 429,
+      toHumanError: {
+        type: 'server',
+        title: 'Too Many Requests',
+        message: 'You are sending requests too quickly.',
+        action: 'Wait a moment and try again.',
+        code: 'ERR_RATE_LIMIT',
+        retryable: true,
+      },
+    },
+  ],
+});
+```
+
+### `useHumanError(options?)`
+
+React hook for managing error state.
+
+```ts
+const {
+  error,
+  hasError,
+  lastRawError,
+  showError,
+  clearError,
+  setError,
+  retry,
+} = useHumanError({
+  onError: (humanError, originalError) => {
+    console.error('Captured:', humanError, originalError);
+  },
+  onRetryError: (humanError, retryError) => {
+    console.error('Retry failed:', humanError, retryError);
+  },
+});
+```
+
+### `ErrorToast`
+
+Built-in UI component to display `HumanError` quickly.
+
+Props:
+
+- `error: HumanError`
+- `onClose: () => void`
+- `onRetry?: () => void`
+- `retryLabel?: string` (default: `"Try Again"`)
+- `closeLabel?: string` (default: `"Close error notification"`)
+- `autoCloseMs?: number` (default: `8000`)
+
+## Utility Helpers
+
+```ts
+import { ensureHumanError, isHumanError } from 'nextjs-human-error';
+
+const safeError = ensureHumanError(unknownError);
+
+if (isHumanError(safeError)) {
+  console.log(safeError.title);
+}
+```
+
+## Type Reference
+
+```ts
+type ErrorType = 'network' | 'validation' | 'server' | 'auth' | 'unknown';
 
 interface HumanError {
-  type: 'network' | 'validation' | 'auth' | 'server' | 'unknown';
-  title: string;        // "Connection Lost"
-  message: string;      // User-friendly description
-  action?: string;      // Suggested solution
-  code?: string;        // Error code for debugging
-  retryable: boolean;   // Show retry button?
+  type: ErrorType;
+  title: string;
+  message: string;
+  action?: string;
+  code?: string;
+  retryable: boolean;
 }
+```
 
-🛠️ Requirements
+## Requirements
 
-    Next.js 13+
-    React 18+
-    TypeScript (recommended)
+- Next.js 13+
+- React 18+
+- TypeScript 5+
 
-🤝 Contributing
-Contributions welcome! Please open an issue or pull request.
-📄 License
-MIT © Jabes Nelma
-Made with ❤️ for better user experiences
+## Contributing
+
+Contributions are welcome. Please open an issue or submit a pull request.
+
+## License
+
+ISC © Jabes Nelma

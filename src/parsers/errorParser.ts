@@ -1,15 +1,82 @@
-import { HumanError, ErrorType } from '../types';
+import { ErrorMatcher, HumanError, ParseErrorOptions } from '../types';
 
-export function parseError(error: any): HumanError {
-  const defaultError: HumanError = {
-    type: 'unknown',
-    title: 'Something Went Wrong',
-    message: 'An unexpected error occurred. Please try again later.',
-    action: 'If the problem persists, contact support.',
-    retryable: false,
-  };
+const DEFAULT_ERROR: HumanError = {
+  type: 'unknown',
+  title: 'Something Went Wrong',
+  message: 'An unexpected error occurred. Please try again later.',
+  action: 'If the problem persists, contact support.',
+  retryable: false,
+};
 
-  if (isNetworkError(error)) {
+function getMessage(error: unknown): string {
+  if (typeof error === 'string') {
+    return error;
+  }
+
+  if (error && typeof error === 'object' && 'message' in error) {
+    const maybeMessage = (error as { message?: unknown }).message;
+    if (typeof maybeMessage === 'string') {
+      return maybeMessage;
+    }
+  }
+
+  return '';
+}
+
+function getCode(error: unknown): string | undefined {
+  if (!error || typeof error !== 'object' || !('code' in error)) {
+    return undefined;
+  }
+
+  const value = (error as { code?: unknown }).code;
+  return typeof value === 'string' ? value : undefined;
+}
+
+function getStatus(error: unknown): number | undefined {
+  if (!error || typeof error !== 'object' || !('status' in error)) {
+    return undefined;
+  }
+
+  const value = (error as { status?: unknown }).status;
+  return typeof value === 'number' ? value : undefined;
+}
+
+function getName(error: unknown): string | undefined {
+  if (!error || typeof error !== 'object' || !('name' in error)) {
+    return undefined;
+  }
+
+  const value = (error as { name?: unknown }).name;
+  return typeof value === 'string' ? value : undefined;
+}
+
+function resolveMatcherError(matcher: ErrorMatcher, error: unknown): HumanError {
+  return typeof matcher.toHumanError === 'function'
+    ? matcher.toHumanError(error)
+    : matcher.toHumanError;
+}
+
+function runCustomMatchers(error: unknown, matchers?: ErrorMatcher[]): HumanError | null {
+  if (!matchers?.length) {
+    return null;
+  }
+
+  for (const matcher of matchers) {
+    if (matcher.when(error)) {
+      return resolveMatcherError(matcher, error);
+    }
+  }
+
+  return null;
+}
+
+export function parseError(error: unknown, options?: ParseErrorOptions): HumanError {
+  const customMappedError = runCustomMatchers(error, options?.matchers);
+  if (customMappedError) {
+    return customMappedError;
+  }
+
+  if (isNetworkError(error, options?.disableOfflineDetection ?? false)) {
     return {
       type: 'network',
       title: 'Connection Lost',
@@ -24,9 +91,9 @@ export function parseError(error: any): HumanError {
     return {
       type: 'validation',
       title: 'Invalid Input',
-      message: error.message || 'The information you entered is not valid.',
+      message: getMessage(error) || 'The information you entered is not valid.',
       action: 'Please check your input and try again.',
-      code: error.code || 'ERR_VALIDATION',
+      code: getCode(error) || 'ERR_VALIDATION',
       retryable: true,
     };
   }
@@ -37,7 +104,7 @@ export function parseError(error: any): HumanError {
       title: 'Access Denied',
       message: 'Your session has expired or you do not have permission to perform this action.',
       action: 'Please sign in again to continue.',
-      code: error.code || 'ERR_AUTH',
+      code: getCode(error) || 'ERR_AUTH',
       retryable: true,
     };
   }
@@ -48,55 +115,85 @@ export function parseError(error: any): HumanError {
       title: 'Server Error',
       message: 'Our server encountered a problem processing your request. This is temporary.',
       action: 'Please wait a moment and try again.',
-      code: error.code || 'ERR_SERVER',
+      code: getCode(error) || 'ERR_SERVER',
       retryable: true,
     };
   }
 
   const knownError = mapKnownErrors(error);
-  if (knownError) return knownError;
+  if (knownError) {
+    return knownError;
+  }
 
-  return defaultError;
+  return options?.fallbackError ?? DEFAULT_ERROR;
 }
 
-function isNetworkError(error: any): boolean {
+export function createErrorParser(baseOptions?: ParseErrorOptions) {
+  return (error: unknown, perCallOptions?: ParseErrorOptions) => {
+    const mergedOptions: ParseErrorOptions = {
+      ...baseOptions,
+      ...perCallOptions,
+      matchers: [...(baseOptions?.matchers ?? []), ...(perCallOptions?.matchers ?? [])],
+    };
+
+    return parseError(error, mergedOptions);
+  };
+}
+
+function isNetworkError(error: unknown, disableOfflineDetection: boolean): boolean {
+  const message = getMessage(error);
+
+  const isOffline =
+    !disableOfflineDetection &&
+    typeof navigator !== 'undefined' &&
+    typeof navigator.onLine === 'boolean' &&
+    navigator.onLine === false;
+
   return (
-    error?.name === 'NetworkError' ||
-    error?.code === 'NETWORK_ERROR' ||
-    error?.message?.includes('fetch') ||
-    error?.message?.includes('network') ||
-    !navigator?.onLine
+    getName(error) === 'NetworkError' ||
+    getCode(error) === 'NETWORK_ERROR' ||
+    message.toLowerCase().includes('fetch') ||
+    message.toLowerCase().includes('network') ||
+    isOffline
   );
 }
 
-function isValidationError(error: any): boolean {
+function isValidationError(error: unknown): boolean {
+  const code = getCode(error);
+  const status = getStatus(error);
+
   return (
-    error?.name === 'ValidationError' ||
-    error?.code?.startsWith('VALIDATION') ||
-    error?.status === 400 ||
-    error?.status === 422
+    getName(error) === 'ValidationError' ||
+    code?.startsWith('VALIDATION') ||
+    status === 400 ||
+    status === 422
   );
 }
 
-function isAuthError(error: any): boolean {
+function isAuthError(error: unknown): boolean {
+  const message = getMessage(error).toLowerCase();
+  const status = getStatus(error);
+
   return (
-    error?.status === 401 ||
-    error?.status === 403 ||
-    error?.code === 'UNAUTHORIZED' ||
-    error?.message?.includes('unauthorized') ||
-    error?.message?.includes('forbidden')
+    status === 401 ||
+    status === 403 ||
+    getCode(error) === 'UNAUTHORIZED' ||
+    message.includes('unauthorized') ||
+    message.includes('forbidden')
   );
 }
 
-function isServerError(error: any): boolean {
+function isServerError(error: unknown): boolean {
+  const status = getStatus(error);
+
   return (
-    error?.status >= 500 ||
-    error?.code === 'INTERNAL_SERVER_ERROR'
+    (typeof status === 'number' && status >= 500) ||
+    getCode(error) === 'INTERNAL_SERVER_ERROR'
   );
 }
 
-function mapKnownErrors(error: any): HumanError | null {
-  const message = error?.message?.toLowerCase() || '';
+function mapKnownErrors(error: unknown): HumanError | null {
+  const message = getMessage(error).toLowerCase();
   
   if (message.includes('unique constraint')) {
     return {
