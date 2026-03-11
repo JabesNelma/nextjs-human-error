@@ -170,7 +170,60 @@ interface HumanError {
 
 ## Contributing
 
-Contributions are welcome. Please open an issue or submit a pull request.
+We welcome contributions from everyone! Whether you're fixing bugs, adding features, improving documentation, or sharing ideas, your help is appreciated.
+
+### Getting Started
+
+1. **Fork the repository**
+   ```bash
+   git clone https://github.com/YOUR_USERNAME/nextjs-human-error.git
+   cd nextjs-human-error
+   ```
+
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
+
+3. **Start development**
+   ```bash
+   npm run dev
+   ```
+
+4. **Build the project**
+   ```bash
+   npm run build
+   ```
+
+### How to Contribute
+
+- **Report bugs**: Open an [issue](https://github.com/JabesNelma/nextjs-human-error/issues) with a clear description and reproduction steps
+- **Suggest features**: Share your ideas in [discussions](https://github.com/JabesNelma/nextjs-human-error/discussions)
+- **Submit PRs**: Open a pull request with your improvements
+- **Improve docs**: Help us write better examples and documentation
+
+### Areas We Need Help With
+
+- [ ] Unit tests and test coverage
+- [ ] E2E testing examples
+- [ ] Custom error matcher recipes
+- [ ] Performance optimizations
+- [ ] Better error categorization
+- [ ] TypeScript strict mode validation
+- [ ] Example apps (Next.js, React SPA, etc.)
+- [ ] Translations and i18n support
+
+### Development Guidelines
+
+- Use TypeScript for type safety
+- Follow existing code style
+- Add tests for new features
+- Update README for breaking changes
+- Keep commits descriptive
+
+### Questions?
+
+Feel free to open a discussion or reach out. All skill levels are welcome!
 
 ## License
 
